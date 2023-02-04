@@ -13,15 +13,27 @@ Sounds are played with SuperCollider
 
 Writing it in the present tense makes it sound like it's already done!
 
-TODO
-
-- basic node that goes ping
-
-- connect one node to another
-
-- GUI to create nodes and connect them in chickadee
+TODO, in order:
 
 
-object model
+Part 1:
 
-- node 
+a goblins node which can do:
+
+- have a value and a threshold and a list of other nodes it connects to
+- check to see if its value > threshold, fire if it is
+- recieve a signal from another node
+- do things when it fires:
+  - write something to the command line
+  - send signals to its downstream nodes
+
+
+node methods:
+
+- tick: event loop trigger, check v > t
+- fire - called by the event loop
+- connect - add a downstream node
+- recieve - recieve a signal from upstream
+
+There has to be a node called Clock which fires on a regular basis with no 
+input
