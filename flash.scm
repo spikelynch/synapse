@@ -1,4 +1,7 @@
-;; put a node in the middle of the window and make it flash on and off
+
+;; todo for today - try to get the chickadee-vat loading and "running"
+;; in some sens
+
 
 (use-modules 
 	(chickadee)
@@ -6,7 +9,9 @@
  	(chickadee math rect)
  	(chickadee graphics sprite)
  	(chickadee graphics color)
- 	(chickadee scripting))
+ 	(chickadee scripting)
+  (goblins)
+  (synapse chickadee-vat))
 
 
 
@@ -17,22 +22,37 @@
 (define off-sprite #f)
 ;;(define clock-script #f)
 
+
+;;(define goblin-agenda (make-agenda))
+
+(define (^node bcom my-name)
+  (lambda (value)
+    (format #f "Ping ~a ~a" my-name value)))
+
+
+(define my-vat (make-chickadee-vat #:agenda (current-agenda)))
+
+(vat-start! my-vat)
+
+
 (define nodes '())
 
 
 (define (reset!)
   (set! nodes '()))
 
-(define* (create-node pos threshold)
+(define* (create-node name pos threshold)
 	(list
+    (cons 'obj (with-vat my-vat (spawn ^node name)))
+    (cons 'name name)
 		(cons 'pos pos)
 		(cons 'threshold threshold)
 		(cons 'value #f)))
 
-(define (add-node! pos threshold)
+(define (add-node! name pos threshold)
   (set! nodes
     (cons
-     (create-node pos threshold) nodes)))
+     (create-node name pos threshold) nodes)))
 
 
 (define (draw-node node)
@@ -43,7 +63,7 @@
 (set! on-sprite (load-image "assets/on.png"))
 (set! off-sprite (load-image "assets/off.png"))
 
-(add-node! (vec2 100.0 100.0) 10)
+
 
 (define clock-script
     (script
@@ -52,11 +72,16 @@
        (sleep 2))))
 
 
-;; load isn't working for me with chickadee play?
+;; load isn't working for me with chickadee play
 (define (load)
   (set! on-sprite (load-image "assets/on.png"))
   (set! off-sprite (load-image "assets/off.png"))
-  (add-node! (vec2 400.0 300.0) 10))
+  (format #t "load was called!"))
+
+(define (mouse-press button clicks x y)
+  (script
+    (format #t "[ ~a ~a ]\n" x y)
+    (add-node! "Node" (vec2 x y) 10)))
 
 
 (define (draw alpha)
