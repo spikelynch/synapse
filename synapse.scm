@@ -1,6 +1,8 @@
 (use-modules (goblins))
+(use-modules (fibers timers))
 (use-modules (goblins actor-lib cell))
 (use-modules (goblins actor-lib methods))
+(use-modules (ice-9 optargs))
 
 (define (^neuron bcom name threshold value connections)
 	(methods
@@ -10,6 +12,10 @@
 			(format #f "[~a] connections: ~a" name connections))
 		((connect neuron)
 			(bcom (^neuron bcom name threshold value (cons neuron connections))))
+		((delayed delay)
+			(begin
+				(sleep delay)
+				(format #f "[~a] delayed reaction" name)))
 		((receive input)
 			(define new-value (+ value input))
 			(if (> new-value threshold)

@@ -11,6 +11,8 @@
  	(chickadee graphics color)
  	(chickadee scripting)
   (goblins)
+  (goblins actor-lib cell)
+  (goblins actor-lib methods)
   (synapse chickadee-vat))
 
 
@@ -20,14 +22,30 @@
 
 (define on-sprite #f)
 (define off-sprite #f)
-;;(define clock-script #f)
-
-
-;;(define goblin-agenda (make-agenda))
 
 (define (^node bcom my-name)
   (lambda (value)
     (format #f "Ping ~a ~a" my-name value)))
+
+
+(define (^neuron bcom name threshold value connections)
+  (methods
+    ((get)
+      (format #f "[~a] ~a / ~a" name value threshold))
+    ((list)
+      (format #f "[~a] connections: ~a" name connections))
+    ((connect neuron)
+      (bcom (^neuron bcom name threshold value (cons neuron connections))))
+    ((receive input)
+      (define new-value (+ value input))
+      (if (> new-value threshold)
+        (begin
+          (map (lambda (n) ($ n 'receive 1)) connections)
+          (bcom (^neuron bcom name threshold 0 connections)
+            (format #t "[~a] Fired!\n" name)))
+        (bcom (^neuron bcom name threshold new-value connections)
+          (format #t "[~a] increment to ~a\n" name new-value))))))
+
 
 
 (define my-vat (make-chickadee-vat #:agenda (current-agenda)))
@@ -43,7 +61,7 @@
 
 (define* (create-node name pos threshold)
 	(list
-    (cons 'obj (with-vat my-vat (spawn ^node name)))
+    (cons 'neuron (with-vat my-vat (spawn ^neuron name 10 0 '())))
     (cons 'name name)
 		(cons 'pos pos)
 		(cons 'threshold threshold)
@@ -68,7 +86,11 @@
 (define clock-script
     (script
      (while #t
-      (for-each (lambda (n) (assoc-set! n 'value (not (assoc-ref n 'value)))) nodes)
+      (for-each (lambda (n)
+        (begin
+          (assoc-set! n 'value (not (assoc-ref n 'value)))
+          (with-vat my-vat ($ (assoc-ref n 'neuron) 'receive 1))))
+        nodes)
        (sleep 2))))
 
 
