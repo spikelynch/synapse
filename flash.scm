@@ -34,7 +34,8 @@
     ((get)
       (format #f "[~a] ~a / ~a" name value threshold))
     ((get-value)
-      value)
+      (begin (format #t "[~a] get-value ~a\n" name value)
+        value))
     ((list)
       (format #f "[~a] connections: ~a" name connections))
     ((connect neuron)
@@ -87,8 +88,9 @@
 (define white (make-color 1.0 1.0 1.0 0.78))
 
 (define (node-color node)
-  (let ((percent (/ (assoc-ref node 'value) (assoc-ref node 'threshold))))
-    (make-color 1.0 1.0 1.0 percent)))
+  (let ((percent (/ (assoc-ref node 'value) (assoc-ref node 'threshold)))
+        (red (/ (vec2-x (assoc-ref node 'pos)) 800.0)))
+    (make-color red 0.2 0.2 percent)))
 
 (define clock-script
     (script
@@ -97,10 +99,10 @@
         (for-each (lambda (n)
           (let ((neuron (assoc-ref n 'neuron)))
             (begin
-              ($ neuron 'receive 1))
-              (assoc-set! n 'value ($ neuron 'get-value))))
+              ($ neuron 'receive 1)
+              (assoc-set! n 'value ($ neuron 'get-value)))))
           nodes)
-       (sleep 0.2)))))
+       (sleep 1.0)))))
 
 
 ;; load isn't working for me with chickadee play
@@ -110,9 +112,10 @@
   (format #t "load was called!"))
 
 (define (mouse-press button clicks x y)
-  (script
-    (format #t "[ ~a ~a ]\n" x y)
-    (add-node! "Node" (vec2 x y) 10)))
+  (let ((node-name (format #f "Node (~a,~a)" x y)))
+    (script
+      (add-node! node-name (vec2 x y) 10))))
+
 
 
 
