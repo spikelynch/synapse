@@ -9,6 +9,7 @@
  	(chickadee math rect)
  	(chickadee graphics sprite)
  	(chickadee graphics color)
+  (chickadee graphics path)
  	(chickadee scripting)
   (goblins)
   (goblins actor-lib cell)
@@ -32,6 +33,8 @@
   (methods
     ((get)
       (format #f "[~a] ~a / ~a" name value threshold))
+    ((get-value)
+      value)
     ((list)
       (format #f "[~a] connections: ~a" name connections))
     ((connect neuron)
@@ -61,11 +64,11 @@
 
 (define* (create-node name pos threshold)
 	(list
-    (cons 'neuron (with-vat my-vat (spawn ^neuron name 10 0 '())))
+    (cons 'neuron (with-vat my-vat (spawn ^neuron name threshold 0 '())))
     (cons 'name name)
 		(cons 'pos pos)
 		(cons 'threshold threshold)
-		(cons 'value #f)))
+		(cons 'value 0)))
 
 (define (add-node! name pos threshold)
   (set! nodes
@@ -81,17 +84,23 @@
 (set! on-sprite (load-image "assets/on.png"))
 (set! off-sprite (load-image "assets/off.png"))
 
+(define white (make-color 1.0 1.0 1.0 0.78))
 
+(define (node-color node)
+  (let ((percent (/ (assoc-ref node 'value) (assoc-ref node 'threshold))))
+    (make-color 1.0 1.0 1.0 percent)))
 
 (define clock-script
     (script
      (while #t
-      (for-each (lambda (n)
-        (begin
-          (assoc-set! n 'value (not (assoc-ref n 'value)))
-          (with-vat my-vat ($ (assoc-ref n 'neuron) 'receive 1))))
-        nodes)
-       (sleep 2))))
+      (with-vat my-vat
+        (for-each (lambda (n)
+          (let ((neuron (assoc-ref n 'neuron)))
+            (begin
+              ($ neuron 'receive 1))
+              (assoc-set! n 'value ($ neuron 'get-value))))
+          nodes)
+       (sleep 0.2)))))
 
 
 ;; load isn't working for me with chickadee play
@@ -106,8 +115,16 @@
     (add-node! "Node" (vec2 x y) 10)))
 
 
+
+(define (paint-node node)
+  (with-style ((fill-color (node-color node)))
+    (fill (circle (assoc-ref node 'pos) 10))))
+
+(define (paint-nodes nodes)
+  (apply superimpose (map paint-node nodes)))
+
 (define (draw alpha)
-  (for-each draw-node nodes))
+  (draw-canvas (make-canvas (paint-nodes nodes))))
 
 (define (update dt)
   (let ((dt-seconds (/ dt 1000.0)))
