@@ -24,32 +24,24 @@
 (define on-sprite #f)
 (define off-sprite #f)
 
-(define (^node bcom my-name)
-  (lambda (value)
-    (format #f "Ping ~a ~a" my-name value)))
 
 
 (define (^neuron bcom name threshold value connections)
   (methods
-    ((get)
-      (format #f "[~a] ~a / ~a" name value threshold))
-    ((get-value)
-      (begin (format #t "[~a] get-value ~a\n" name value)
-        value))
-    ((list)
-      (format #f "[~a] connections: ~a" name connections))
+    ((get-value) value)
+    ((get-name) name)
+    ((get-connections) connections)
     ((connect neuron)
-      (bcom (^neuron bcom name threshold value (cons neuron connections))))
+      (begin
+        (format #t "[~a] adding connection to [~a]\n" name ($ neuron 'get-name))
+        (bcom (^neuron bcom name threshold value (cons neuron connections)))))
     ((receive input)
       (define new-value (+ value input))
-      (if (> new-value threshold)
+      (if (>= new-value threshold)
         (begin
-          (map (lambda (n) ($ n 'receive 1)) connections)
-          (bcom (^neuron bcom name threshold 0 connections)
-            (format #t "[~a] Fired!\n" name)))
-        (bcom (^neuron bcom name threshold new-value connections)
-          (format #t "[~a] increment to ~a\n" name new-value))))))
-
+          (for-each (lambda (n) ($ n 'receive 1)) connections)
+          (bcom (^neuron bcom name threshold 0 connections)))
+        (bcom (^neuron bcom name threshold new-value connections))))))
 
 
 (define my-vat (make-chickadee-vat #:agenda (current-agenda)))
@@ -59,9 +51,15 @@
 
 (define nodes '())
 
+(define clock-neuron #f)
 
 (define (reset!)
   (set! nodes '()))
+
+
+(define white (make-color 1.0 1.0 1.0 0.78))
+(define color-off (make-color 1.0 1.0 1.0 0))
+
 
 (define* (create-node name pos threshold)
 	(list
@@ -69,12 +67,15 @@
     (cons 'name name)
 		(cons 'pos pos)
 		(cons 'threshold threshold)
-		(cons 'value 0)))
+		(cons 'value 0)
+    (cons 'color color-off)))
 
 (define (add-node! name pos threshold)
-  (set! nodes
-    (cons
-     (create-node name pos threshold) nodes)))
+  (let ((new-node (create-node name pos threshold)))
+    (begin
+      (if (nil? nodes)
+        (set! clock-neuron (assoc-ref new-node 'neuron)))
+      (set! nodes (cons new-node nodes)))))
 
 
 (define (draw-node node)
@@ -85,43 +86,61 @@
 (set! on-sprite (load-image "assets/on.png"))
 (set! off-sprite (load-image "assets/off.png"))
 
-(define white (make-color 1.0 1.0 1.0 0.78))
 
 (define (node-color node)
   (let ((percent (/ (assoc-ref node 'value) (assoc-ref node 'threshold)))
         (red (/ (vec2-x (assoc-ref node 'pos)) 800.0)))
-    (make-color red 0.2 0.2 percent)))
+    (make-color red 0.2 0.2 (+ 0.2 (* 0.8 percent)))))
 
 (define clock-script
     (script
      (while #t
       (with-vat my-vat
-        (for-each (lambda (n)
-          (let ((neuron (assoc-ref n 'neuron)))
-            (begin
-              ($ neuron 'receive 1)
-              (assoc-set! n 'value ($ neuron 'get-value)))))
-          nodes)
-       (sleep 1.0)))))
+        (begin
+          (if clock-neuron
+            ($ clock-neuron 'receive 1)))
+          (for-each (lambda (n)
+            (let ((neuron (assoc-ref n 'neuron)))
+              (begin
+                (assoc-set! n 'value ($ neuron 'get-value))
+                (assoc-set! n 'color (node-color n))
+                )))
+            nodes))
+       (sleep 0.05))))
 
 
 ;; load isn't working for me with chickadee play
 (define (load)
-  (set! on-sprite (load-image "assets/on.png"))
-  (set! off-sprite (load-image "assets/off.png"))
   (format #t "load was called!"))
 
 (define (mouse-press button clicks x y)
-  (let ((node-name (format #f "Node (~a,~a)" x y)))
+  (let ((node-name (format #f "(~a,~a)" x y))
+        (is-first (nil? nodes)))
     (script
-      (add-node! node-name (vec2 x y) 10))))
+      (add-node! node-name (vec2 x y) 4)
+      (if (not is-first)
+        (begin
+          (format #t "connecting new node\n")
+          (let ((last-n (assoc-ref (cadr nodes) 'neuron))
+                (new-n (assoc-ref (car nodes) 'neuron)))
+            (with-vat my-vat
+              ($ last-n 'connect new-n))))))))
 
 
 
 
 (define (paint-node node)
-  (with-style ((fill-color (node-color node)))
-    (fill (circle (assoc-ref node 'pos) 10))))
+  (with-style ((stroke-color (node-color node)) (stroke-width 5))
+    (stroke (circle (assoc-ref node 'pos) (+ 10 (* 8 (assoc-ref node 'value)))))))
+
+(define (paint-node-fill node)
+  (with-style (
+    (fill-color (node-color node))
+    (stroke-color (node-color node))
+    (stroke-width 5))
+    (fill-and-stroke
+      (circle (assoc-ref node 'pos) (+ 10 (* 5 (assoc-ref node 'value)))))))
+
 
 (define (paint-nodes nodes)
   (apply superimpose (map paint-node nodes)))
@@ -134,20 +153,4 @@
     (update-agenda dt)))
 
 
-
-; (define (start!)
-;   (run-game
-;    #:window-width window-width
-;    #:window-height window-height
-;    #:load load
-;    #:update update
-;    #:draw draw))
-
-; (define (stop!)
-;   (abort-game))
-
-; (start!)
-; (reset!)
-
-;;(cancel-script spawn-asteroid-script)
 
