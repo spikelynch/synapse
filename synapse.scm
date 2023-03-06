@@ -3,6 +3,7 @@
 
 (use-modules 
 	(chickadee)
+  (chickadee audio)
  	(chickadee math vector)
  	(chickadee math rect)
  	(chickadee graphics sprite)
@@ -20,6 +21,11 @@
 (define on-sprite #f)
 (define off-sprite #f)
 
+(define bang-sample #f)
+
+(set! bang-sample (load-audio "assets/bing.wav"))
+
+(init-audio)
 
 (define drag-line-start #f)
 (define drag-line-end #f)
@@ -33,7 +39,7 @@
 (define ui-agenda (make-agenda))
 
 
-(define (^neuron bcom name threshold value pos connections)
+(define (^neuron bcom name threshold value fire pos connections)
   (methods
     ((get-value) value)
     ((get-name) name)
@@ -42,14 +48,15 @@
     ((connect neuron)
       (begin
         (format #t "[~a] adding connection to [~a]\n" name ($ neuron 'get-name))
-        (bcom (^neuron bcom name threshold value pos (cons neuron connections)))))
+        (bcom (^neuron bcom name threshold value fire pos (cons neuron connections)))))
     ((receive input)
       (define new-value (+ value input))
       (if (>= new-value threshold)
         (begin
           (for-each (lambda (n) ($ n 'receive 1)) connections)
-          (bcom (^neuron bcom name threshold 0 pos connections)))
-        (bcom (^neuron bcom name threshold new-value pos connections))))))
+          (fire)
+          (bcom (^neuron bcom name threshold 0 fire pos connections)))
+        (bcom (^neuron bcom name threshold new-value fire pos connections))))))
 
 
 (define my-vat (make-chickadee-vat #:agenda neuron-agenda))
@@ -80,9 +87,12 @@
         (width (* 2 node-width)))
     (rect x y width width)))
 
+(define (play-note)
+  (audio-play bang-sample))
+
 (define* (create-node name pos threshold)
 	(list
-    (cons 'neuron (with-vat my-vat (spawn ^neuron name threshold 0 pos '())))
+    (cons 'neuron (with-vat my-vat (spawn ^neuron name threshold 0 play-note pos '())))
     (cons 'name name)
 		(cons 'pos pos)
     (cons 'bbox (node-bbox pos))
@@ -113,10 +123,12 @@
         (red (/ (vec2-x (assoc-ref node 'pos)) 800.0)))
     (make-color red 0.2 0.2 (+ 0.2 (* 0.8 percent)))))
 
+
+
 (define clock-script
   (with-agenda neuron-agenda
     (script
-      (while #t
+      (forever
         (with-vat my-vat
           (begin
             (if clock-neuron
@@ -130,19 +142,6 @@
         (sleep 0.02)))))
 
 
-(define links-script
-  (with-agenda neuron-agenda
-    (script
-     (while #t
-      (with-vat my-vat
-        (for-each (lambda (n)
-          (let ((neuron (assoc-ref n 'neuron)))
-            (assoc-set! n 'links 
-              (map
-                (lambda (c) ($ c 'get-pos))
-                ($ neuron 'get-connections)))))
-          nodes)
-        (sleep 0.1))))))
 
 
 (define (update-links)
