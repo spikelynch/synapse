@@ -22,6 +22,8 @@
 (define on-sprite #f)
 (define off-sprite #f)
 
+(define (fix-mouse-y)
+  (- window-height (mouse-y)))
 
 
 (define (^neuron bcom name threshold value pos connections)
@@ -59,15 +61,15 @@
 (define white (make-color 1.0 1.0 1.0 0.78))
 (define color-off (make-color 1.0 1.0 1.0 0))
 
-(define node-width 10)
+(define node-width 30)
 
 (define link-color (rgba #x003040))
 (define link-width 1)
 
 
 (define (node-bbox pos)
-  (let ((x (vec2-x pos))
-        (y (vec2-y pos))
+  (let ((x (- (vec2-x pos) node-width))
+        (y (- (vec2-y pos) node-width))
         (width (* 2 node-width)))
     (rect x y width width)))
 
@@ -172,7 +174,7 @@
                 (with-vat my-vat
                   ($ last-n 'connect new-n)
                   (update-links))))))
-          (format #t "Can't add a node in another node")))))
+          ))))
 
 
 
