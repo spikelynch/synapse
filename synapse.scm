@@ -59,14 +59,24 @@
 (define white (make-color 1.0 1.0 1.0 0.78))
 (define color-off (make-color 1.0 1.0 1.0 0))
 
+(define node-width 10)
+
 (define link-color (rgba #x003040))
 (define link-width 1)
+
+
+(define (node-bbox pos)
+  (let ((x (vec2-x pos))
+        (y (vec2-y pos))
+        (width (* 2 node-width)))
+    (rect x y width width)))
 
 (define* (create-node name pos threshold)
 	(list
     (cons 'neuron (with-vat my-vat (spawn ^neuron name threshold 0 pos '())))
     (cons 'name name)
 		(cons 'pos pos)
+    (cons 'bbox (node-bbox pos))
 		(cons 'threshold threshold)
 		(cons 'value 0)
     (cons 'links '())
@@ -139,34 +149,38 @@
 (define (load)
   (format #t "load was called!"))
 
+(define (clicked-node x y)
+  (filter (lambda (n)
+    (rect-contains-vec2? (assoc-ref n 'bbox) (vec2 x y)))
+    nodes))
+  
+
+
 (define (mouse-press button clicks x y)
   (let ((node-name (format #f "(~a,~a)" x y))
+        (in-node (clicked-node x y))
         (is-first (nil? nodes)))
     (script
-      (add-node! node-name (vec2 x y) 4)
-      (if (not is-first)
+      (if (nil? in-node)
         (begin
-          (format #t "connecting new node\n")
-          (let ((last-n (assoc-ref (cadr nodes) 'neuron))
-                (new-n (assoc-ref (car nodes) 'neuron)))
-            (with-vat my-vat
-              ($ last-n 'connect new-n)
-              (update-links))))))))
+          (add-node! node-name (vec2 x y) 4)
+          (if (not is-first)
+            (begin
+              (format #t "connecting new node\n")
+              (let ((last-n (assoc-ref (cadr nodes) 'neuron))
+                    (new-n (assoc-ref (car nodes) 'neuron)))
+                (with-vat my-vat
+                  ($ last-n 'connect new-n)
+                  (update-links))))))
+          (format #t "Can't add a node in another node")))))
 
 
 
 
 (define (paint-node node)
   (with-style ((stroke-color (node-color node)) (stroke-width 5))
-    (stroke (circle (assoc-ref node 'pos) (+ 10 (* 8 (assoc-ref node 'value)))))))
+    (stroke (circle (assoc-ref node 'pos) node-width))))
 
-(define (paint-node-fill node)
-  (with-style (
-    (fill-color (node-color node))
-    (stroke-color (node-color node))
-    (stroke-width 5))
-    (fill-and-stroke
-      (circle (assoc-ref node 'pos) (+ 10 (* 5 (assoc-ref node 'value)))))))
 
 (define (paint-nodes nodes)
   (apply superimpose (map paint-node nodes)))
