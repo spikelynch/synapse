@@ -16,14 +16,21 @@
 
 
 
-(define window-width 800)
-(define window-height 600)
 
 (define on-sprite #f)
 (define off-sprite #f)
 
+
+(define drag-line-start #f)
+(define drag-line-end #f)
+(define drag-node #f)
+
 (define (fix-mouse-y)
-  (- window-height (mouse-y)))
+  (- (window-height (current-window)) (mouse-y)))
+
+
+(define neuron-agenda (make-agenda))
+(define ui-agenda (make-agenda))
 
 
 (define (^neuron bcom name threshold value pos connections)
@@ -45,7 +52,7 @@
         (bcom (^neuron bcom name threshold new-value pos connections))))))
 
 
-(define my-vat (make-chickadee-vat #:agenda (current-agenda)))
+(define my-vat (make-chickadee-vat #:agenda neuron-agenda))
 
 (vat-start! my-vat)
 
@@ -107,22 +114,24 @@
     (make-color red 0.2 0.2 (+ 0.2 (* 0.8 percent)))))
 
 (define clock-script
+  (with-agenda neuron-agenda
     (script
-     (while #t
-      (with-vat my-vat
-        (begin
-          (if clock-neuron
-            ($ clock-neuron 'receive 1)))
-          (for-each (lambda (n)
-            (let ((neuron (assoc-ref n 'neuron)))
-              (begin
-                (assoc-set! n 'value ($ neuron 'get-value))
-                (assoc-set! n 'color (node-color n)))))
-            nodes))
-       (sleep 0.02))))
+      (while #t
+        (with-vat my-vat
+          (begin
+            (if clock-neuron
+              ($ clock-neuron 'receive 1)))
+            (for-each (lambda (n)
+              (let ((neuron (assoc-ref n 'neuron)))
+                (begin
+                  (assoc-set! n 'value ($ neuron 'get-value))
+                  (assoc-set! n 'color (node-color n)))))
+              nodes))
+        (sleep 0.02)))))
 
 
 (define links-script
+  (with-agenda neuron-agenda
     (script
      (while #t
       (with-vat my-vat
@@ -133,7 +142,7 @@
                 (lambda (c) ($ c 'get-pos))
                 ($ neuron 'get-connections)))))
           nodes)
-        (sleep 0.2)))))
+        (sleep 0.1))))))
 
 
 (define (update-links)
@@ -151,7 +160,46 @@
 (define (load)
   (format #t "load was called!"))
 
-(define (clicked-node x y)
+
+
+
+
+
+(define mouse-drag-script
+  (with-agenda ui-agenda
+    (script
+      (while #t
+        (if drag-line-start
+          (let ((mx (mouse-x)) (my (fix-mouse-y)))
+            (if (mouse-button-pressed? 'left)
+              (set! drag-line-end (vec2 mx my))
+              (let ((target (point-in-node mx my)))
+                (if (not (nil? target))
+                  (add-link! drag-node (car target)))
+                (set! drag-node #f) 
+                (set! drag-line-start #f)
+                (set! drag-line-end #f)))))
+        (sleep 0.02)))))
+
+
+
+(define (add-link! source target)
+  (let ((source-n (assoc-ref source 'neuron))
+        (target-n (assoc-ref target 'neuron)))
+    (if (not (eq? source target))
+      (with-vat my-vat
+        ($ source-n 'connect target-n)
+        (update-links)))))
+
+
+(define (start-drag! node)
+  (let ((pos (assoc-ref node 'pos)))
+    (set! drag-node node)
+    (set! drag-line-start pos)))
+
+
+
+(define (point-in-node x y)
   (filter (lambda (n)
     (rect-contains-vec2? (assoc-ref n 'bbox) (vec2 x y)))
     nodes))
@@ -160,21 +208,16 @@
 
 (define (mouse-press button clicks x y)
   (let ((node-name (format #f "(~a,~a)" x y))
-        (in-node (clicked-node x y))
+        (in-node (point-in-node x y))
         (is-first (nil? nodes)))
-    (script
-      (if (nil? in-node)
-        (begin
-          (add-node! node-name (vec2 x y) 4)
-          (if (not is-first)
-            (begin
-              (format #t "connecting new node\n")
-              (let ((last-n (assoc-ref (cadr nodes) 'neuron))
-                    (new-n (assoc-ref (car nodes) 'neuron)))
-                (with-vat my-vat
-                  ($ last-n 'connect new-n)
-                  (update-links))))))
-          ))))
+      (with-agenda ui-agenda
+        (script
+          (if (eq? button 'left)
+            (if (nil? in-node)
+              (add-node! node-name (vec2 x y) 4)
+              (start-drag! (car in-node))))))))
+
+
 
 
 
@@ -202,13 +245,27 @@
 (define (paint-links nodes)
   (apply superimpose (map paint-node-links nodes)))
 
+
+(define (paint-drag-line)
+  (with-style ((stroke-color blue) (stroke-width 1))
+    (stroke
+      (if (and drag-line-start drag-line-end)
+        (line drag-line-start drag-line-end)
+        (path (move-to (vec2 0.0 0.0)))))))
+
+
 (define (draw alpha)
   (draw-canvas (make-canvas
-    (superimpose (paint-links nodes) (paint-nodes nodes)))))
+    (superimpose
+      (paint-drag-line)
+      (paint-links nodes)
+      (paint-nodes nodes)))))
 
 (define (update dt)
   (let ((dt-seconds (/ dt 1000.0)))
+    (current-agenda neuron-agenda)
+    (update-agenda dt)
+    (current-agenda ui-agenda)
     (update-agenda dt)))
-
 
 
