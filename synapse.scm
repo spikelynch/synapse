@@ -16,52 +16,24 @@
   (synapse chickadee-vat))
 
 
-
+(define time-step 0.03)
 
 (define on-sprite #f)
 (define off-sprite #f)
 
 (define bang-sample #f)
 
-(set! bang-sample (load-audio "assets/bing.wav"))
-
-(init-audio)
+(define my-vat #f)
+(define neuron-agenda #f)
+(define ui-agenda #f)
 
 (define drag-line-start #f)
 (define drag-line-end #f)
 (define drag-node #f)
 
-(define (fix-mouse-y)
-  (- (window-height (current-window)) (mouse-y)))
-
-
-(define neuron-agenda (make-agenda))
-(define ui-agenda (make-agenda))
-
-
-(define (^neuron bcom name threshold value fire pos connections)
-  (methods
-    ((get-value) value)
-    ((get-name) name)
-    ((get-connections) connections)
-    ((get-pos) pos)
-    ((connect neuron)
-      (begin
-        (format #t "[~a] adding connection to [~a]\n" name ($ neuron 'get-name))
-        (bcom (^neuron bcom name threshold value fire pos (cons neuron connections)))))
-    ((receive input)
-      (define new-value (+ value input))
-      (if (>= new-value threshold)
-        (begin
-          (for-each (lambda (n) ($ n 'receive 1)) connections)
-          (fire)
-          (bcom (^neuron bcom name threshold 0 fire pos connections)))
-        (bcom (^neuron bcom name threshold new-value fire pos connections))))))
-
-
-(define my-vat (make-chickadee-vat #:agenda neuron-agenda))
-
-(vat-start! my-vat)
+(define clock-script #f)
+(define display-script #f)
+(define mouse-drag-script #f)
 
 
 (define nodes '())
@@ -81,6 +53,37 @@
 (define link-width 1)
 
 
+
+(define (fix-mouse-y)
+  (- (window-height (current-window)) (mouse-y)))
+
+;; uses a list of seen neurons passed to receive to stop loops
+
+(define (^neuron bcom name threshold value fire pos connections)
+  (methods
+    ((get-value) value)
+    ((get-name) name)
+    ((get-connections) connections)
+    ((get-pos) pos)
+    ((connect neuron)
+      (begin
+        (format #t "[~a] adding connection to [~a]\n" name ($ neuron 'get-name))
+        (bcom (^neuron bcom name threshold value fire pos (cons neuron connections)))))
+    ((receive input seen)
+      (if (not (memv name seen))
+        (let ((new-value (+ value input)))
+          (if (and (>= new-value threshold))
+            (begin
+              (fire)
+              (for-each (lambda (n) ($ n 'receive 1 (cons name seen))) connections)
+              (bcom (^neuron bcom name threshold 0 fire pos connections)))
+            (bcom (^neuron bcom name threshold new-value fire pos connections))))))))
+
+
+
+
+
+
 (define (node-bbox pos)
   (let ((x (- (vec2-x pos) node-width))
         (y (- (vec2-y pos) node-width))
@@ -90,16 +93,21 @@
 (define (play-note)
   (audio-play bang-sample))
 
-(define* (create-node name pos threshold)
-	(list
-    (cons 'neuron (with-vat my-vat (spawn ^neuron name threshold 0 play-note pos '())))
-    (cons 'name name)
-		(cons 'pos pos)
-    (cons 'bbox (node-bbox pos))
-		(cons 'threshold threshold)
-		(cons 'value 0)
-    (cons 'links '())
-    (cons 'color color-off)))
+(define (make-rand-note)
+  (let ((pitch (+ 0.25 (random 8.0))))
+    (lambda () (audio-play bang-sample #:pitch pitch))))
+
+(define (create-node name pos threshold)
+  (let ((rand-note (make-rand-note)))
+	   (list
+      (cons 'neuron (with-vat my-vat (spawn ^neuron name threshold 0 rand-note pos '())))
+      (cons 'name name)
+		  (cons 'pos pos)
+      (cons 'bbox (node-bbox pos))
+		  (cons 'threshold threshold)
+		  (cons 'value 0)
+      (cons 'links '())
+      (cons 'color color-off))))
 
 (define (add-node! name pos threshold)
   (let ((new-node (create-node name pos threshold)))
@@ -125,23 +133,6 @@
 
 
 
-(define clock-script
-  (with-agenda neuron-agenda
-    (script
-      (forever
-        (with-vat my-vat
-          (begin
-            (if clock-neuron
-              ($ clock-neuron 'receive 1)))
-            (for-each (lambda (n)
-              (let ((neuron (assoc-ref n 'neuron)))
-                (begin
-                  (assoc-set! n 'value ($ neuron 'get-value))
-                  (assoc-set! n 'color (node-color n)))))
-              nodes))
-        (sleep 0.02)))))
-
-
 
 
 (define (update-links)
@@ -155,30 +146,12 @@
 
 
 
-;; load isn't working for me with chickadee play
-(define (load)
-  (format #t "load was called!"))
 
 
 
 
 
 
-(define mouse-drag-script
-  (with-agenda ui-agenda
-    (script
-      (while #t
-        (if drag-line-start
-          (let ((mx (mouse-x)) (my (fix-mouse-y)))
-            (if (mouse-button-pressed? 'left)
-              (set! drag-line-end (vec2 mx my))
-              (let ((target (point-in-node mx my)))
-                (if (not (nil? target))
-                  (add-link! drag-node (car target)))
-                (set! drag-node #f) 
-                (set! drag-line-start #f)
-                (set! drag-line-end #f)))))
-        (sleep 0.02)))))
 
 
 
@@ -253,6 +226,56 @@
         (path (move-to (vec2 0.0 0.0)))))))
 
 
+
+(define (load)
+  (set! bang-sample (load-audio "assets/bang.wav"))
+  (init-audio)
+  (set! neuron-agenda (make-agenda))
+  (set! ui-agenda (make-agenda))
+  (set! my-vat (make-chickadee-vat #:agenda neuron-agenda))
+  (vat-start! my-vat)
+  (set! clock-script
+    (with-agenda neuron-agenda
+      (script
+        (forever
+          (with-vat my-vat
+            (begin
+              (if clock-neuron
+                ($ clock-neuron 'receive 1 '()))))
+          (sleep time-step)))))
+
+  (set! display-script
+    (with-agenda ui-agenda
+      (script
+        (forever
+          (with-vat my-vat
+            (for-each (lambda (n)
+              (let ((neuron (assoc-ref n 'neuron)))
+                  (begin
+                    (assoc-set! n 'value ($ neuron 'get-value))
+                    (assoc-set! n 'color (node-color n)))))
+                  nodes))
+          (sleep 0.1)))))
+
+  (set! mouse-drag-script
+    (with-agenda ui-agenda
+      (script
+        (while #t
+          (if drag-line-start
+            (let ((mx (mouse-x)) (my (fix-mouse-y)))
+              (if (mouse-button-pressed? 'left)
+                (set! drag-line-end (vec2 mx my))
+                (let ((target (point-in-node mx my)))
+                  (if (not (nil? target))
+                    (add-link! drag-node (car target)))
+                  (set! drag-node #f) 
+                  (set! drag-line-start #f)
+                  (set! drag-line-end #f)))))
+          (sleep 0.02)))))
+  )
+
+
+
 (define (draw alpha)
   (draw-canvas (make-canvas
     (superimpose
@@ -267,4 +290,5 @@
     (current-agenda ui-agenda)
     (update-agenda dt)))
 
+(run-game #:load load #:update update #:draw draw #:mouse-press mouse-press)
 
