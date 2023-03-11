@@ -13,8 +13,14 @@
  	(chickadee scripting))
 
 
+(define window-width 800)
+(define window-height 600)
+
 (define drag-line-start #f)
 (define drag-line-end #f)
+
+(define (load-game)
+  (display "Load!\n"))
 
 (define flasher-state #t)
 
@@ -22,13 +28,14 @@
 (define drag-agenda (make-agenda))
 
 (define (fix-mouse-y)
-  (- (window-height (current-window)) (mouse-y)))
+  (- window-height (mouse-y)))
 
 (define (mouse-press button clicks x y)
-  (script
-    (if (eq? button 'left)
-      (if (not drag-line-start)
-        (set! drag-line-start (vec2 x y))))))
+  (with-agenda drag-agenda
+    (script
+      (if (eq? button 'left)
+        (if (not drag-line-start)
+          (set! drag-line-start (vec2 x y)))))))
 
 (define mouse-drag-script
   (with-agenda drag-agenda
@@ -73,3 +80,13 @@
     (update-agenda dt)
     (current-agenda main-agenda)
     (update-agenda dt)))
+
+(run-game
+   #:window-title "Dragging lines..."
+   #:window-width window-width
+   #:window-height window-height
+   #:mouse-press mouse-press
+   #:load load-game
+   #:update update
+   #:draw draw)
+

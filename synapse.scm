@@ -47,7 +47,7 @@
 (define white (make-color 1.0 1.0 1.0 0.78))
 (define color-off (make-color 1.0 1.0 1.0 0))
 
-(define node-width 30)
+(define node-width 10)
 
 (define link-color (rgba #x003040))
 (define link-width 1)
@@ -191,6 +191,9 @@
 
 
 
+(define (paint-node-fill node)
+  (with-style ((fill-color (node-color node)))
+    (fill (circle (assoc-ref node 'pos) node-width))))
 
 
 
@@ -200,7 +203,7 @@
 
 
 (define (paint-nodes nodes)
-  (apply superimpose (map paint-node nodes)))
+  (apply superimpose (map paint-node-fill nodes)))
 
 
 (define (paint-link v1 v2)
